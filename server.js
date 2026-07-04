@@ -174,18 +174,15 @@ const CLIENT_JS = `
       }
 
       grid.innerHTML = apps.map(function(app) {
-        return '<div class="app-card" data-id="' + app.id + '">' +
+        return '<a href="/app/' + app.id + '" class="app-card" data-id="' + app.id + '" style="color:inherit;">' +
           '<div class="icon">' + (app.icon_filename ? '<img src="/uploads/icons/' + app.icon_filename + '" alt="' + app.name + '" />' : initials(app.name)) + '</div>' +
           '<h3>' + app.name + '</h3>' +
           '<p class="desc">' + (app.description || "No description provided.") + '</p>' +
           '<span class="tag">' + app.category + '</span>' +
           '<div class="meta"><span>v' + app.version + '</span><span>' + app.downloads + ' downloads</span></div>' +
-        '</div>';
+        '</a>';
       }).join("");
 
-      document.querySelectorAll(".app-card").forEach(function(card) {
-        card.addEventListener("click", function() { openModal(card.dataset.id, apps); });
-      });
     }
 
     function openModal(id, apps) {
@@ -385,9 +382,62 @@ function uploadPage() {
 </body></html>`;
 }
 
+function appDetailPage(app) {
+  const safeName = app.name.replace(/</g, "&lt;");
+  const safeDesc = (app.description || `Download ${app.name} APK for free.`).replace(/</g, "&lt;");
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${safeName} - Download APK | AppHub</title>
+<meta name="description" content="${safeDesc}" />
+<style>${CSS}</style></head>
+<body>
+<header class="topbar">
+  <div class="brand">📦 AppHub</div>
+  <nav><a href="/">Browse</a><a href="/upload">Upload App</a></nav>
+</header>
+<main class="container narrow">
+  <div class="modal" style="margin-top:20px;">
+    <div class="icon-lg">${app.icon_filename ? `<img src="/uploads/icons/${app.icon_filename}" alt="${safeName}" />` : app.name.trim().slice(0,2).toUpperCase()}</div>
+    <h1>${safeName}</h1>
+    <span class="tag">${app.category}</span>
+    <p style="color:var(--text-dim); margin-top:12px;">${safeDesc}</p>
+    <div class="meta" style="margin:14px 0;"><span>Version ${app.version}</span><span>${app.downloads} downloads</span></div>
+    <a class="download-btn" href="/download/${app.id}" style="display:block;">Download APK</a>
+  </div>
+</main>
+</body></html>`;
+}
+
 // ---------- Page routes ----------
 app.get("/", (req, res) => res.send(browsePage()));
 app.get("/upload", (req, res) => res.send(uploadPage()));
+
+// SEO-friendly individual page per app (server-rendered so Google can read it directly)
+app.get("/app/:id", (req, res) => {
+  const app_ = db.prepare("SELECT * FROM apps WHERE id = ?").get(req.params.id);
+  if (!app_) return res.status(404).send("App not found");
+  res.send(appDetailPage(app_));
+});
+
+// Sitemap so Google knows every app page that exists
+app.get("/sitemap.xml", (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const apps = db.prepare("SELECT id, uploaded_at FROM apps").all();
+  const urls = [
+    `<url><loc>${baseUrl}/</loc></url>`,
+    `<url><loc>${baseUrl}/upload</loc></url>`,
+    ...apps.map(a => `<url><loc>${baseUrl}/app/${a.id}</loc></url>`)
+  ].join("\n");
+  res.set("Content-Type", "application/xml");
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`);
+});
+
+// robots.txt pointing search engines to the sitemap
+app.get("/robots.txt", (req, res) => {
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  res.type("text/plain").send(`User-agent: *\nAllow: /\nSitemap: ${baseUrl}/sitemap.xml`);
+});
 
 // ---------- API routes ----------
 app.post("/api/upload", upload.fields([{ name: "apk", maxCount: 1 }, { name: "icon", maxCount: 1 }]), (req, res) => {
