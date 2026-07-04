@@ -433,6 +433,11 @@ app.get("/sitemap.xml", (req, res) => {
   res.send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`);
 });
 
+// Google Search Console site verification
+app.get("/google82d0d559bb878323.html", (req, res) => {
+  res.type("text/html").send("google-site-verification: google82d0d559bb878323.html");
+});
+
 // robots.txt pointing search engines to the sitemap
 app.get("/robots.txt", (req, res) => {
   const baseUrl = `${req.protocol}://${req.get("host")}`;
